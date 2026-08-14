@@ -1,0 +1,14 @@
+google-adk
+google-generativeai
+mcp==1.28.1
+fastapi
+uvicorn
+pydantic
+python-dotenv
+geopy
+python-multipart
+requests
+google-cloud-firestore
+pytest
+pytest-mock
+httpx

@@ -1,0 +1,13 @@
+# Secrets — never commit the real .env
+.env
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# OS / editor cruft
+.DS_Store
+.vscode/
+.idea/
