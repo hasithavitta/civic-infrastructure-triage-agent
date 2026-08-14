@@ -1,38 +1,50 @@
+import os
 from dataclasses import asdict
-from google.cloud import firestore
+from dotenv import load_dotenv
+from supabase import create_client, Client
 from agents.schema import Report
 
-# Initialize the Firestore client
-# Application Default Credentials (ADC) are used automatically.
-db = firestore.Client()
+# Load environment variables (useful for local runs & standalone test scripts)
+load_dotenv()
+
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+
+if not SUPABASE_URL or not SUPABASE_KEY:
+    raise ImportError(
+        "Supabase client initialization failed: "
+        "SUPABASE_URL and SUPABASE_KEY environment variables must be set."
+    )
+
+# Initialize the Supabase client
+db: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def save_report(report: Report) -> None:
     """
-    Saves a report to the 'reports' Firestore collection.
-    Uses report.report_id as the document ID.
+    Saves a report to the 'reports' Supabase table.
+    Uses report.report_id as the primary key.
     """
     if not report.report_id:
         print("[storage] Warning: cannot save report without a report_id.")
         return
     try:
-        doc_ref = db.collection("reports").document(report.report_id)
-        doc_ref.set(asdict(report))
+        data = asdict(report)
+        db.table("reports").upsert(data).execute()
     except Exception as e:
-        print(f"[storage] Warning: Failed to save report to Firestore: {e}. Degrading gracefully.")
+        print(f"[storage] Warning: Failed to save report to Supabase: {e}. Degrading gracefully.")
 
 def get_all_reports() -> list[Report]:
     """
-    Retrieves all reports from the 'reports' Firestore collection.
-    Reconstructs each document as a Report dataclass instance.
+    Retrieves all reports from the 'reports' Supabase table.
+    Reconstructs each row as a Report dataclass instance.
     """
     try:
-        docs = db.collection("reports").stream()
+        response = db.table("reports").select("*").execute()
         reports = []
-        for doc in docs:
-            data = doc.to_dict()
-            # Construct Report object from document dictionary
-            reports.append(Report(**data))
+        for row in response.data:
+            reports.append(Report(**row))
         return reports
     except Exception as e:
-        print(f"[storage] Warning: Failed to retrieve reports from Firestore: {e}. Returning empty list.")
+        print(f"[storage] Warning: Failed to retrieve reports from Supabase: {e}. Returning empty list.")
         return []
+

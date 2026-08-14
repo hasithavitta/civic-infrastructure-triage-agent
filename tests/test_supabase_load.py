@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from agents.storage import get_all_reports
 
 def run_load():
-    print("Loading reports from Firestore...")
+    print("Loading reports from Supabase...")
     # Read the expected report_id from temp file
     if not os.path.exists("tests/saved_report_id.txt"):
         print("Error: No saved report ID found. Run save script first.")
@@ -33,7 +33,7 @@ def run_load():
         print(f"Severity: {found.severity_score} - {found.severity_reasoning}")
     else:
         print("\n=== FAILURE ===")
-        print(f"Expected report ID {expected_id} was NOT found in Firestore.")
+        print(f"Expected report ID {expected_id} was NOT found in Supabase.")
         sys.exit(1)
 
 if __name__ == "__main__":

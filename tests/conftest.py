@@ -1,3 +1,7 @@
+import os
+os.environ.setdefault("SUPABASE_URL", "https://dummy-supabase-url.supabase.co")
+os.environ.setdefault("SUPABASE_KEY", "dummy-supabase-key")
+
 import pytest
 from agents.schema import Report
 

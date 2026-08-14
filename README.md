@@ -71,7 +71,8 @@ Each stage requires judgment, not a lookup table:
 - **MCP Server** — custom geocoding/maps tool server (`mcp_server/geocoding_server.py`)
 - **LLM** — Gemini (via ADK)
 - **API** — FastAPI wrapper (`main.py`) exposing `/triage` and a `/` health check
-- **Deployment** — Google Cloud Run (containerized via `Dockerfile`)
+- **Deployment** — Render (Docker web service)
+- **Database** — Supabase table storage
 - **Security** — PII redaction on intake (phone numbers/emails stripped from
   free-text descriptions via regex before the report reaches the model or
   is stored)
@@ -145,25 +146,31 @@ confirm the Intake Agent actually inspects the image content rather than
 trusting the text description blindly. Automated tests for the full agent
 pipeline (beyond the MCP server smoke test) are a known gap — see Roadmap.
 
-## Deploying to Cloud Run
+## Deploying to Render
 
-```bash
-gcloud run deploy civic-triage-agent \
-  --source . \
-  --region <your-region> \
-  --allow-unauthenticated \
-  --update-env-vars GOOGLE_API_KEY=<your-key>,GOOGLE_GENAI_USE_VERTEXAI=False
-```
+This application is deployed as a containerized Docker Web Service on Render.
 
-> 🚨 Never commit API keys or passwords, and never type a real key
-> directly into a shell command if you can avoid it (it can end up in
-> your shell history). Read it from your local `.env` into a variable
-> first, then pass the variable.
->
-> `--allow-unauthenticated` makes the endpoint public — fine while
-> actively developing, but plan to lock this down (Cloud Run IAM auth or
-> an API key check in `main.py`) before treating this as anything more
-> than a personal sandbox.
+### Deployment Steps:
+
+1. **Database Setup**:
+   Create a new project on [Supabase](https://supabase.com). In the Supabase SQL Editor, run the DDL script in [schema.sql](file:///c:/Users/Admin/Desktop/civic-triage-agent/schema.sql) to set up the `reports` table.
+
+2. **Create Render Service**:
+   - Log in to [Render](https://render.com) and create a new **Web Service**.
+   - Connect your GitHub repository containing this project.
+
+3. **Configure Service Settings**:
+   - **Language/Environment**: Choose **Docker**.
+   - **Instance Type**: Select **Free** (or any tier of your choice).
+   - **Health Check Path**: Set to `/` (this verifies that the service starts and responds with `{"status":"ok"}`).
+
+4. **Add Environment Variables**:
+   In the **Environment** tab on Render's dashboard, add the following variables:
+   - `GOOGLE_API_KEY`: Your Gemini API key.
+   - `GOOGLE_GENAI_USE_VERTEXAI`: `False`.
+   - `SUPABASE_URL`: Your Supabase project URL.
+   - `SUPABASE_KEY`: Your Supabase API key (anon key is fine).
+   - `TRIAGE_API_KEY`: Your secret API key to secure the `/triage` endpoint (sent via the `X-API-Key` header).
 
 ## Known limitations
 
@@ -172,11 +179,7 @@ working demo" and "something you'd trust in production":
 
 - **No authentication** on the deployed endpoint — anyone with the URL can
   call it. Fine for now, not fine long-term.
-- **In-memory report storage** (`EXISTING_REPORTS` in `orchestrator.py`) —
-  duplicate detection only works within a single running instance, so it
-  won't reliably catch duplicates across Cloud Run's auto-scaled instances
-  or after a restart. A real deployment needs a persistent store (Firestore
-  or a small Postgres instance would both work well here).
+- **Database Persistence** — Reports are stored persistently in Supabase, preventing duplicate check loss after service restarts or across scaled instances.
 - **Geocoding isn't actually wired into the Intake Agent yet** — the MCP
   server's `geocode_address` tool exists and is tested standalone, but
   `run_intake()` doesn't call it yet, so `latitude`/`longitude` stay `null`
@@ -196,8 +199,7 @@ Rough priority order for continuing this as a real project, not just a demo:
 1. Wire `geocode_address` into `run_intake()` so `latitude`/`longitude`
    actually populate, and have the Duplicate Check Agent use real distance
    calculations (via `distance_meters`) alongside semantic matching.
-2. Replace in-memory report storage with a real database (Firestore is the
-   natural fit given the rest of the stack is already GCP).
+2. Replace in-memory report storage with a real database (Done — using Supabase).
 3. Add authentication to the deployed endpoint.
 4. Add a proper automated test suite for the four agents (mocking the
    Gemini calls, testing the orchestrator's branching logic in isolation).

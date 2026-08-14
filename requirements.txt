@@ -8,7 +8,7 @@ python-dotenv
 geopy
 python-multipart
 requests
-google-cloud-firestore
+supabase
 pytest
 pytest-mock
 httpx

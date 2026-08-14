@@ -17,12 +17,11 @@ def run():
         print("=== STEP 1: Submitting initial report ===")
         # Prune database to ensure clean test
         from agents.storage import db
-        docs = db.collection("reports").stream()
-        count = 0
-        for doc in docs:
-            doc.reference.delete()
-            count += 1
-        print(f"Cleared {count} existing records in Firestore.")
+        try:
+            db.table("reports").delete().neq("report_id", "").execute()
+            print("Cleared existing records in Supabase.")
+        except Exception as e:
+            print(f"Warning: Failed to clear records in Supabase: {e}")
         
         # Submit first report (Yashoda Hospital, Somajiguda)
         report = process_report(

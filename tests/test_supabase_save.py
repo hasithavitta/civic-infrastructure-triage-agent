@@ -8,7 +8,7 @@ from agents.schema import Report
 from agents.storage import save_report
 
 def run_save():
-    print("Saving test report to Firestore...")
+    print("Saving test report to Supabase...")
     report_id = f"test-report-{uuid.uuid4()}"
     report = Report(
         raw_text="This is a persistent storage unit test.",
