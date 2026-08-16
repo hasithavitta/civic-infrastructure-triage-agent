@@ -2,6 +2,7 @@ import os
 import uvicorn
 import secrets
 from fastapi import FastAPI, HTTPException, Form, UploadFile, Header, Depends
+from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
 from dataclasses import asdict
 
@@ -12,6 +13,14 @@ app = FastAPI(
     title="Civic Triage Agent API",
     description="FastAPI wrapper for citizen infrastructure reports triage",
     version="1.0.0"
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 def verify_api_key(x_api_key: Optional[str] = Header(None)):
