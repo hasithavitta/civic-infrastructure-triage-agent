@@ -23,9 +23,9 @@ _APP_NAME = "civic-triage-agent"
 
 
 async def _run_agent_async(agent, prompt: str, user_id: str = "local-user") -> str:
-    max_retries = 5
-    base_delay = 10.0
-    for attempt in range(max_retries):
+    max_retries = 2
+    delays = [2.0, 4.0]
+    for attempt in range(max_retries + 1):
         try:
             session_id = str(uuid.uuid4())
             await _session_service.create_session(
@@ -49,13 +49,20 @@ async def _run_agent_async(agent, prompt: str, user_id: str = "local-user") -> s
             return final_text
         except Exception as e:
             err_str = str(e)
-            if "Quota exceeded" in err_str or "RESOURCE_EXHAUSTED" in err_str or "429" in err_str:
-                delay = base_delay * (2 ** attempt)
-                print(f"[runner_utils] Rate limit hit. Retrying in {delay:.1f} seconds... (Attempt {attempt+1}/{max_retries})")
+            is_transient = any(
+                term in err_str for term in [
+                    "Quota exceeded", "RESOURCE_EXHAUSTED", "429",
+                    "UNAVAILABLE", "503", "Service Unavailable"
+                ]
+            )
+            if is_transient and attempt < max_retries:
+                delay = delays[attempt]
+                print(f"[runner_utils] Transient error (attempt {attempt+1}/{max_retries}), retrying in {delay:.0f}s...")
                 await asyncio.sleep(delay)
             else:
+                if is_transient:
+                    print(f"[runner_utils] Giving up after {max_retries} attempts, raising to caller.")
                 raise e
-    raise Exception("Max retries exceeded for rate limit.")
 
 
 def run_agent(agent, prompt: str) -> str:
@@ -67,9 +74,9 @@ def run_agent(agent, prompt: str) -> str:
 async def _run_agent_multimodal_async(
     agent, text_prompt: str, image_bytes: bytes, mime_type: str, user_id: str = "local-user"
 ) -> str:
-    max_retries = 5
-    base_delay = 10.0
-    for attempt in range(max_retries):
+    max_retries = 2
+    delays = [2.0, 4.0]
+    for attempt in range(max_retries + 1):
         try:
             session_id = str(uuid.uuid4())
             await _session_service.create_session(
@@ -97,13 +104,20 @@ async def _run_agent_multimodal_async(
             return final_text
         except Exception as e:
             err_str = str(e)
-            if "Quota exceeded" in err_str or "RESOURCE_EXHAUSTED" in err_str or "429" in err_str:
-                delay = base_delay * (2 ** attempt)
-                print(f"[runner_utils] Rate limit hit. Retrying in {delay:.1f} seconds... (Attempt {attempt+1}/{max_retries})")
+            is_transient = any(
+                term in err_str for term in [
+                    "Quota exceeded", "RESOURCE_EXHAUSTED", "429",
+                    "UNAVAILABLE", "503", "Service Unavailable"
+                ]
+            )
+            if is_transient and attempt < max_retries:
+                delay = delays[attempt]
+                print(f"[runner_utils] Transient error (attempt {attempt+1}/{max_retries}), retrying in {delay:.0f}s...")
                 await asyncio.sleep(delay)
             else:
+                if is_transient:
+                    print(f"[runner_utils] Giving up after {max_retries} attempts, raising to caller.")
                 raise e
-    raise Exception("Max retries exceeded for rate limit.")
 
 
 def run_agent_multimodal(
