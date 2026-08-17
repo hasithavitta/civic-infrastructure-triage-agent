@@ -25,12 +25,17 @@ app.add_middleware(
 
 def verify_api_key(x_api_key: Optional[str] = Header(None)):
     triage_key = os.environ.get("TRIAGE_API_KEY")
-    if not triage_key:
+    demo_key = os.environ.get("TRIAGE_DEMO_API_KEY")
+    if not triage_key and not demo_key:
         raise HTTPException(
             status_code=500,
             detail="TRIAGE_API_KEY environment variable is not configured on the server."
         )
-    if not x_api_key or not secrets.compare_digest(x_api_key, triage_key):
+    
+    match_triage = triage_key and x_api_key and secrets.compare_digest(x_api_key, triage_key)
+    match_demo = demo_key and x_api_key and secrets.compare_digest(x_api_key, demo_key)
+    
+    if not (match_triage or match_demo):
         raise HTTPException(
             status_code=401,
             detail="Invalid or missing API key"

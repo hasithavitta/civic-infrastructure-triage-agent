@@ -56,6 +56,7 @@ def test_health_check_no_auth(monkeypatch, client):
 
 def test_triage_not_configured(mocker, monkeypatch, client):
     monkeypatch.delenv("TRIAGE_API_KEY", raising=False)
+    monkeypatch.delenv("TRIAGE_DEMO_API_KEY", raising=False)
     mock_process = mocker.patch("main.process_report")
     
     response = client.post(
@@ -67,3 +68,20 @@ def test_triage_not_configured(mocker, monkeypatch, client):
     assert response.status_code == 500
     assert "TRIAGE_API_KEY environment variable is not configured" in response.json()["detail"]
     mock_process.assert_not_called()
+
+def test_triage_demo_key_success(mocker, monkeypatch, report_factory, client):
+    monkeypatch.delenv("TRIAGE_API_KEY", raising=False)
+    monkeypatch.setenv("TRIAGE_DEMO_API_KEY", "demo-secret-key")
+    mock_process = mocker.patch("main.process_report")
+    mock_process.return_value = report_factory(issue_type="pothole", description="Mock pothole")
+    
+    response = client.post(
+        "/triage", 
+        data={"raw_text": "Pothole on Main St."}, 
+        headers={"X-API-Key": "demo-secret-key"}
+    )
+    
+    assert response.status_code == 200
+    assert response.json()["issue_type"] == "pothole"
+    mock_process.assert_called_once()
+
