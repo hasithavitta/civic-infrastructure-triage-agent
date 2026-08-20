@@ -23,8 +23,8 @@ _APP_NAME = "civic-triage-agent"
 
 
 async def _run_agent_async(agent, prompt: str, user_id: str = "local-user") -> str:
-    max_retries = 2
-    delays = [2.0, 4.0]
+    max_retries = 5
+    delays = [4.0, 8.0, 16.0, 32.0, 60.0]
     for attempt in range(max_retries + 1):
         try:
             session_id = str(uuid.uuid4())
@@ -74,8 +74,8 @@ def run_agent(agent, prompt: str) -> str:
 async def _run_agent_multimodal_async(
     agent, text_prompt: str, image_bytes: bytes, mime_type: str, user_id: str = "local-user"
 ) -> str:
-    max_retries = 2
-    delays = [2.0, 4.0]
+    max_retries = 5
+    delays = [4.0, 8.0, 16.0, 32.0, 60.0]
     for attempt in range(max_retries + 1):
         try:
             session_id = str(uuid.uuid4())

@@ -7,10 +7,15 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 # Import orchestrator
 import orchestrator
-from orchestrator import process_report, EXISTING_REPORTS
+from orchestrator import process_report
+from agents.storage import db
 
 def run_pipeline_test():
-    EXISTING_REPORTS.clear()
+    try:
+        db.table("reports").delete().neq("report_id", "").execute()
+        print("Database reports cleared.")
+    except Exception as e:
+        print(f"Warning: Failed to clear database reports: {e}")
     
     # We use a real address near a known hospital in Hyderabad
     raw_text = "A massive crater is reported right in the road at Yashoda Hospital, Somajiguda, Hyderabad."

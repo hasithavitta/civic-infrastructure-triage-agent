@@ -6,7 +6,8 @@ from dataclasses import asdict
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import orchestrator
-from orchestrator import process_report, EXISTING_REPORTS
+from orchestrator import process_report
+from agents.storage import db
 from agents.schema import Report
 
 # Bypass severity and dispatch to focus only on intake and duplicate detection
@@ -27,7 +28,11 @@ def mock_geocode_address_core(address: str) -> dict:
 agents.intake_agent.geocode_address_core = mock_geocode_address_core
 
 def run_harder_test():
-    EXISTING_REPORTS.clear()
+    try:
+        db.table("reports").delete().neq("report_id", "").execute()
+        print("Database reports cleared.")
+    except Exception as e:
+        print(f"Warning: Failed to clear database reports: {e}")
     
     print("\nProcessing Report 1...")
     report1 = process_report(

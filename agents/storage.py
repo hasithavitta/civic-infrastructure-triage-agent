@@ -1,5 +1,5 @@
 import os
-from dataclasses import asdict
+from dataclasses import asdict, fields
 from dotenv import load_dotenv
 from supabase import create_client, Client
 from agents.schema import Report
@@ -41,10 +41,34 @@ def get_all_reports() -> list[Report]:
     try:
         response = db.table("reports").select("*").execute()
         reports = []
+        report_fields = {f.name for f in fields(Report)}
         for row in response.data:
-            reports.append(Report(**row))
+            filtered_row = {k: v for k, v in row.items() if k in report_fields}
+            reports.append(Report(**filtered_row))
         return reports
     except Exception as e:
         print(f"[storage] Warning: Failed to retrieve reports from Supabase: {e}. Returning empty list.")
         return []
+
+def get_nearby_reports(lat: float, lon: float, radius_meters: float) -> list[Report]:
+    """
+    Retrieves reports within radius_meters from the specified coordinates
+    using the Supabase RPC function 'get_reports_near'.
+    Reconstructs each row as a Report dataclass instance.
+    """
+    try:
+        response = db.rpc(
+            'get_reports_near',
+            {'lat': lat, 'lon': lon, 'radius_meters': radius_meters}
+        ).execute()
+        reports = []
+        report_fields = {f.name for f in fields(Report)}
+        for row in response.data:
+            filtered_row = {k: v for k, v in row.items() if k in report_fields}
+            reports.append(Report(**filtered_row))
+        return reports
+    except Exception as e:
+        print(f"[storage] Warning: Failed to retrieve nearby reports from Supabase: {e}. Returning empty list.")
+        return []
+
 

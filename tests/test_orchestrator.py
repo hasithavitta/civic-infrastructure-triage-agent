@@ -56,7 +56,7 @@ def test_orchestrator_duplicate_short_circuit(mocker, mock_storage, report_facto
     assert res.duplicate_of_report_id == "first-report-id"
     mock_storage.save.assert_called_once_with(r_dup)
 
-def test_orchestrator_calls_get_all_reports_first(mocker, mock_storage, report_factory):
+def test_orchestrator_does_not_fetch_all_reports(mocker, mock_storage, report_factory):
     mock_intake = mocker.patch("orchestrator.run_intake")
     mock_dup = mocker.patch("orchestrator.run_duplicate_check")
     mocker.patch("orchestrator.run_severity_classification")
@@ -69,5 +69,5 @@ def test_orchestrator_calls_get_all_reports_first(mocker, mock_storage, report_f
     from orchestrator import process_report
     process_report(raw_text="A pothole.")
     
-    # Verify database fetch is called at the start of every pipeline invocation
-    mock_storage.get_all.assert_called_once()
+    # Verify that run_duplicate_check was called with the report
+    mock_dup.assert_called_once_with(r_intake)

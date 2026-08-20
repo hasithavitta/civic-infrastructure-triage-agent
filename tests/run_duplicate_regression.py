@@ -8,7 +8,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 # Import orchestrator first
 import orchestrator
-from orchestrator import process_report, EXISTING_REPORTS
+from orchestrator import process_report
+from agents.storage import db
 from agents.schema import Report
 
 # Monkeypatch/mock severity and dispatch to bypass rate limits and speed up tests
@@ -42,7 +43,11 @@ def print_json(label: str, report: Report):
     print(json.dumps(asdict(report), indent=2))
 
 def run_tests():
-    EXISTING_REPORTS.clear()
+    try:
+        db.table("reports").delete().neq("report_id", "").execute()
+        print("Database reports cleared.")
+    except Exception as e:
+        print(f"Warning: Failed to clear database reports: {e}")
 
     print("======================================================================")
     print("TEST 1: Regression case (Charminar, different wording)")
@@ -70,7 +75,11 @@ def run_tests():
     print("\n======================================================================")
     print("TEST 2: Proximity pre-filter (Same issue type, far apart)")
     print("======================================================================")
-    EXISTING_REPORTS.clear()
+    try:
+        db.table("reports").delete().neq("report_id", "").execute()
+        print("Database reports cleared.")
+    except Exception as e:
+        print(f"Warning: Failed to clear database reports: {e}")
     
     print("\nSleeping for 30 seconds to respect API rate limits (RPM)...")
     time.sleep(30)
@@ -96,7 +105,11 @@ def run_tests():
     print("\n======================================================================")
     print("TEST 3: Null address / coordinates report")
     print("======================================================================")
-    EXISTING_REPORTS.clear()
+    try:
+        db.table("reports").delete().neq("report_id", "").execute()
+        print("Database reports cleared.")
+    except Exception as e:
+        print(f"Warning: Failed to clear database reports: {e}")
     
     print("\nSleeping for 30 seconds to respect API rate limits (RPM)...")
     time.sleep(30)

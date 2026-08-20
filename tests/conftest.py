@@ -47,7 +47,7 @@ def mock_geocoding(mocker):
     Mock geocoding server function imports in the namespaces where they are used.
     """
     mock_geocode = mocker.patch("agents.intake_agent.geocode_address_core")
-    mock_distance = mocker.patch("agents.duplicate_check_agent.distance_meters_core")
+    mock_distance = mocker.patch("mcp_server.geocoding_server.distance_meters_core")
     mock_landmarks = mocker.patch("agents.severity_classifier_agent.nearby_landmarks_core")
     
     # Set default behaviors
@@ -66,7 +66,7 @@ def mock_geocoding(mocker):
 @pytest.fixture
 def mock_storage(mocker):
     """
-    Mock storage save/get imports at the orchestrator level.
+    Mock storage save/get imports at the orchestrator/agent level.
     """
     in_memory_db = {}
     
@@ -75,22 +75,32 @@ def mock_storage(mocker):
             return
         in_memory_db[report.report_id] = report
         
-    def fake_get_all():
-        return list(in_memory_db.values())
+    def fake_get_nearby(lat, lon, radius_meters):
+        from mcp_server.geocoding_server import distance_meters_core
+        results = []
+        for r in in_memory_db.values():
+            if r.latitude is not None and r.longitude is not None:
+                try:
+                    dist = distance_meters_core(lat, lon, r.latitude, r.longitude)
+                    if dist <= radius_meters:
+                        results.append(r)
+                except Exception:
+                    pass
+        return results
         
     mock_save = mocker.patch("orchestrator.save_report", side_effect=fake_save)
-    mock_get_all = mocker.patch("orchestrator.get_all_reports", side_effect=fake_get_all)
+    mock_get_nearby = mocker.patch("agents.duplicate_check_agent.get_nearby_reports", side_effect=fake_get_nearby)
     
     class StorageMocks:
-        def __init__(self, save, get_all, db):
+        def __init__(self, save, get_nearby, db):
             self.save = save
-            self.get_all = get_all
+            self.get_nearby = get_nearby
             self.db = db
             
         def clear(self):
             self.db.clear()
             
-    return StorageMocks(mock_save, mock_get_all, in_memory_db)
+    return StorageMocks(mock_save, mock_get_nearby, in_memory_db)
 
 @pytest.fixture
 def report_factory():

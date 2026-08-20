@@ -14,7 +14,7 @@ from google.adk.agents import Agent
 
 from agents.schema import Report
 from agents.runner_utils import run_agent, parse_json_response
-from mcp_server.geocoding_server import distance_meters_core
+from agents.storage import get_nearby_reports
 
 DUPLICATE_CHECK_INSTRUCTION = """
 You are the Duplicate Check Agent for a civic infrastructure triage system.
@@ -35,36 +35,21 @@ duplicate_check_agent = Agent(
 )
 
 
-def _is_within_duplicate_radius(r1: Report, r2: Report) -> bool:
-    """
-    Checks if two reports are within DUPLICATE_DISTANCE_THRESHOLD_METERS (100 meters).
-    Both reports must have non-null latitude and longitude.
-    """
-    if r1.latitude is None or r1.longitude is None or r2.latitude is None or r2.longitude is None:
-        return False
-    try:
-        dist = distance_meters_core(r1.latitude, r1.longitude, r2.latitude, r2.longitude)
-        return dist <= DUPLICATE_DISTANCE_THRESHOLD_METERS
-    except Exception as e:
-        print(f"[duplicate_check_agent] Error calculating distance between reports: {e}")
-        return False
-
-
-def run_duplicate_check(report: Report, existing_reports: list[Report]) -> Report:
+def run_duplicate_check(report: Report) -> Report:
     """
     Orchestrator-facing entry point. Checks if the report is a duplicate of any
     existing report using geospatial pre-filtering followed by semantic check.
     """
-    if not existing_reports or report.latitude is None or report.longitude is None:
+    if report.latitude is None or report.longitude is None:
         report.is_duplicate = False
         report.duplicate_of_report_id = None
         return report
 
-    # Build a list of "geospatial candidates"
-    geospatial_candidates = [
-        r for r in existing_reports
-        if _is_within_duplicate_radius(report, r)
-    ]
+    # Build a list of "geospatial candidates" directly from database PostGIS search
+    geospatial_candidates = get_nearby_reports(
+        report.latitude, report.longitude, DUPLICATE_DISTANCE_THRESHOLD_METERS
+    )
+    print(f"[duplicate_check_agent] Found {len(geospatial_candidates)} geospatial candidates nearby.")
 
     if not geospatial_candidates:
         report.is_duplicate = False

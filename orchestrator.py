@@ -25,7 +25,7 @@ from agents.duplicate_check_agent import run_duplicate_check
 from agents.severity_classifier_agent import run_severity_classification
 from agents.dispatch_agent import run_dispatch
 from agents.schema import Report
-from agents.storage import save_report, get_all_reports
+from agents.storage import save_report
 
 
 def process_report(
@@ -36,9 +36,6 @@ def process_report(
 ) -> Report:
     """Runs a single citizen report through the full triage pipeline."""
     import uuid
-
-    # Fetch existing reports dynamically from Firestore
-    existing_reports = get_all_reports()
 
     report = Report(
         raw_text=raw_text,
@@ -57,7 +54,7 @@ def process_report(
 
 
         stage = "Duplicate Check"
-        report = run_duplicate_check(report, existing_reports)
+        report = run_duplicate_check(report)
 
         if report.is_duplicate:
             print(
