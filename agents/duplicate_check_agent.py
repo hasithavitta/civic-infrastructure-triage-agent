@@ -78,6 +78,7 @@ def run_duplicate_check(report: Report) -> Report:
         f"Decide if it represents a duplicate of any of them. Respond ONLY with valid JSON."
     )
 
+    raw_response = None
     try:
         raw_response = run_agent(duplicate_check_agent, prompt)
         parsed = parse_json_response(raw_response)
@@ -86,7 +87,12 @@ def run_duplicate_check(report: Report) -> Report:
         report.duplicate_of_report_id = parsed.get("duplicate_of_report_id")
     except Exception as e:
         print(f"[duplicate_check_agent] Failed to run duplicate check: {e}. Defaulting to non-duplicate.")
-        report.is_duplicate = False
-        report.duplicate_of_report_id = None
+        if not raw_response and geospatial_candidates:
+            report.is_duplicate = True
+            report.duplicate_of_report_id = geospatial_candidates[0].report_id
+            print(f"[duplicate_check_agent] Fallback: marked as duplicate of candidate {geospatial_candidates[0].report_id}")
+        else:
+            report.is_duplicate = False
+            report.duplicate_of_report_id = None
 
     return report

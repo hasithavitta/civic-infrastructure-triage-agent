@@ -16,8 +16,31 @@ from agents.schema import Report
 orchestrator.run_severity_classification = lambda report: report
 orchestrator.run_dispatch = lambda report: report
 
-# Monkeypatch/mock geocoding to resolve descriptive addresses to exact coordinates deterministically
+# Monkeypatch/mock LLM calls to bypass rate limits and avoid daily quota errors
 import agents.intake_agent
+import agents.duplicate_check_agent
+
+def mock_intake_run_agent(agent, prompt):
+    prompt_lower = prompt.lower()
+    if "charminar" in prompt_lower:
+        return '{"issue_type": "pothole", "description": "A pothole near Charminar", "address_or_landmark": "Charminar, Hyderabad"}'
+    elif "india gate" in prompt_lower:
+        return '{"issue_type": "pothole", "description": "A pothole near India Gate", "address_or_landmark": "India Gate, New Delhi"}'
+    else:
+        return '{"issue_type": "pothole", "description": "A generic pothole", "address_or_landmark": ""}'
+
+def mock_duplicate_run_agent(agent, prompt):
+    import re
+    match = re.search(r"Report ID: ([a-f0-9\-]+)", prompt)
+    if match:
+        candidate_id = match.group(1)
+        return f'{{"is_duplicate": true, "duplicate_of_report_id": "{candidate_id}"}}'
+    return '{"is_duplicate": false, "duplicate_of_report_id": null}'
+
+agents.intake_agent.run_agent = mock_intake_run_agent
+agents.duplicate_check_agent.run_agent = mock_duplicate_run_agent
+
+# Monkeypatch/mock geocoding to resolve descriptive addresses to exact coordinates deterministically
 def mock_geocode_address_core(address: str) -> dict:
     if not address:
         return {"latitude": None, "longitude": None, "resolved_address": None}
@@ -37,6 +60,7 @@ def mock_geocode_address_core(address: str) -> dict:
     return {"latitude": None, "longitude": None, "resolved_address": None}
 
 agents.intake_agent.geocode_address_core = mock_geocode_address_core
+
 
 def print_json(label: str, report: Report):
     print(f"\n=== {label} ===")
@@ -59,8 +83,8 @@ def run_tests():
     )
     print_json("Report 1 (Initial Report - Charminar)", report1)
     
-    print("\nSleeping for 30 seconds to respect API rate limits (RPM)...")
-    time.sleep(30)
+    print("\nSleeping for 0.1 seconds (LLM mocked)...")
+    time.sleep(0.1)
     
     # Report 2: different wording ("small pothole" vs "massive crater")
     report2 = process_report(
@@ -81,8 +105,8 @@ def run_tests():
     except Exception as e:
         print(f"Warning: Failed to clear database reports: {e}")
     
-    print("\nSleeping for 30 seconds to respect API rate limits (RPM)...")
-    time.sleep(30)
+    print("\nSleeping for 0.1 seconds (LLM mocked)...")
+    time.sleep(0.1)
 
     # Report 1 again
     report1 = process_report(
@@ -90,8 +114,8 @@ def run_tests():
     )
     print_json("Report 1 (Charminar)", report1)
     
-    print("\nSleeping for 30 seconds to respect API rate limits (RPM)...")
-    time.sleep(30)
+    print("\nSleeping for 0.1 seconds (LLM mocked)...")
+    time.sleep(0.1)
 
     # Report 3: far apart (India Gate, Delhi)
     report3 = process_report(
@@ -111,16 +135,16 @@ def run_tests():
     except Exception as e:
         print(f"Warning: Failed to clear database reports: {e}")
     
-    print("\nSleeping for 30 seconds to respect API rate limits (RPM)...")
-    time.sleep(30)
+    print("\nSleeping for 0.1 seconds (LLM mocked)...")
+    time.sleep(0.1)
 
     # Report 1 again
     report1 = process_report(
         raw_text="There is a pothole near Charminar, Hyderabad."
     )
     
-    print("\nSleeping for 30 seconds to respect API rate limits (RPM)...")
-    time.sleep(30)
+    print("\nSleeping for 0.1 seconds (LLM mocked)...")
+    time.sleep(0.1)
 
     # Report 4: no address / coordinates
     report4 = process_report(

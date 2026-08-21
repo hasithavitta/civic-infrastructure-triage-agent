@@ -36,26 +36,31 @@ def run_live_tests():
     print("======================================================================")
     clear_db()
     
+    print("\nSleeping for 60 seconds to respect API rate limits (RPM)...")
+    time.sleep(60)
+    
     # Report 1
     print("Sending Report 1 (Initial Report - Charminar) to live URL...")
     r1_resp = requests.post(
         LIVE_URL,
         data={"raw_text": "There is a massive crater in the road right in front of Charminar, Hyderabad."},
-        headers=headers
+        headers=headers,
+        timeout=300
     )
     print(f"Report 1 Response status: {r1_resp.status_code}")
     report1 = r1_resp.json()
     print(json.dumps(report1, indent=2))
     
-    print("\nSleeping for 30 seconds to respect API rate limits (RPM)...")
-    time.sleep(30)
+    print("\nSleeping for 60 seconds to respect API rate limits (RPM)...")
+    time.sleep(60)
     
     # Report 2: different wording
     print("Sending Report 2 (Duplicate - Charminar) to live URL...")
     r2_resp = requests.post(
         LIVE_URL,
-        data={"raw_text": "A small pothole is reported near Charminar, Hyderabad."},
-        headers=headers
+        data={"raw_text": "A small pothole is reported at Charminar, Hyderabad."},
+        headers=headers,
+        timeout=300
     )
     print(f"Report 2 Response status: {r2_resp.status_code}")
     report2 = r2_resp.json()
@@ -70,29 +75,31 @@ def run_live_tests():
     print("======================================================================")
     clear_db()
     
-    print("\nSleeping for 30 seconds to respect API rate limits (RPM)...")
-    time.sleep(30)
+    print("\nSleeping for 60 seconds to respect API rate limits (RPM)...")
+    time.sleep(60)
 
     # Report 1 again
     print("Sending Report 1 (Charminar) to live URL...")
     r1_resp = requests.post(
         LIVE_URL,
-        data={"raw_text": "There is a pothole near Charminar, Hyderabad."},
-        headers=headers
+        data={"raw_text": "There is a pothole at Charminar, Hyderabad."},
+        headers=headers,
+        timeout=300
     )
     print(f"Report 1 Response status: {r1_resp.status_code}")
     report1 = r1_resp.json()
     print(json.dumps(report1, indent=2))
     
-    print("\nSleeping for 30 seconds to respect API rate limits (RPM)...")
-    time.sleep(30)
+    print("\nSleeping for 60 seconds to respect API rate limits (RPM)...")
+    time.sleep(60)
 
     # Report 3: far apart (India Gate, Delhi)
     print("Sending Report 3 (Far Away - India Gate) to live URL...")
     r3_resp = requests.post(
         LIVE_URL,
-        data={"raw_text": "There is a pothole near India Gate, New Delhi."},
-        headers=headers
+        data={"raw_text": "There is a pothole at India Gate, New Delhi."},
+        headers=headers,
+        timeout=300
     )
     print(f"Report 3 Response status: {r3_resp.status_code}")
     report3 = r3_resp.json()
@@ -100,6 +107,44 @@ def run_live_tests():
     
     assert report3.get("is_duplicate") is False, "Live Test 2 Failed: Should NOT be marked as duplicate (too far apart)!"
     print("\n=> LIVE TEST 2 PASSED!")
+
+    print("\n======================================================================")
+    print("LIVE TEST 3: Null address / coordinates report")
+    print("======================================================================")
+    clear_db()
+    
+    print("\nSleeping for 60 seconds to respect API rate limits (RPM)...")
+    time.sleep(60)
+
+    # Report 1 again
+    print("Sending Report 1 (Charminar) to live URL...")
+    r1_resp = requests.post(
+        LIVE_URL,
+        data={"raw_text": "There is a pothole at Charminar, Hyderabad."},
+        headers=headers,
+        timeout=300
+    )
+    print(f"Report 1 Response status: {r1_resp.status_code}")
+    report1 = r1_resp.json()
+    print(json.dumps(report1, indent=2))
+    
+    print("\nSleeping for 60 seconds to respect API rate limits (RPM)...")
+    time.sleep(60)
+
+    # Report 4: no address / coordinates
+    print("Sending Report 4 (Null Coordinates) to live URL...")
+    r4_resp = requests.post(
+        LIVE_URL,
+        data={"raw_text": "There is a pothole."},
+        headers=headers,
+        timeout=300
+    )
+    print(f"Report 4 Response status: {r4_resp.status_code}")
+    report4 = r4_resp.json()
+    print(json.dumps(report4, indent=2))
+    
+    assert report4.get("is_duplicate") is False, "Live Test 3 Failed: Null location report should not be marked as duplicate!"
+    print("\n=> LIVE TEST 3 PASSED!")
 
 if __name__ == "__main__":
     run_live_tests()
