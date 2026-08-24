@@ -29,7 +29,7 @@ DUPLICATE_DISTANCE_THRESHOLD_METERS = 100
 
 duplicate_check_agent = Agent(
     name="duplicate_check_agent",
-    model="gemini-flash-latest",
+    model="gemini-1.5-flash",
     description="Matches new reports against nearby candidate reports by location and meaning.",
     instruction=DUPLICATE_CHECK_INSTRUCTION,
 )

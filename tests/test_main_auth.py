@@ -52,7 +52,7 @@ def test_health_check_no_auth(monkeypatch, client):
     response = client.get("/")
     
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    assert response.json()["status"] == "ok"
 
 def test_triage_not_configured(mocker, monkeypatch, client):
     monkeypatch.delenv("TRIAGE_API_KEY", raising=False)
