@@ -44,7 +44,7 @@ def verify_api_key(x_api_key: Optional[str] = Header(None)):
 @app.get("/")
 def health_check():
     """Simple health check endpoint for Cloud Run health checks."""
-    return {"status": "ok", "version": "fallback-rate-limit-v1"}
+    return {"status": "ok", "version": "fallback-rate-limit-v2"}
 
 @app.post("/triage", dependencies=[Depends(verify_api_key)])
 def triage_report(
