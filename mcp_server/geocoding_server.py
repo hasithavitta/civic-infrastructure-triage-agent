@@ -31,7 +31,14 @@ def geocode_address_core(address: str) -> dict:
         dict with latitude, longitude, and the resolved display address.
     """
     try:
-        location = _geolocator.geocode(address)
+        cleaned_address = address
+        # Remove common prepositions/prefixes that cause Nominatim to fail
+        prefixes = ["in front of ", "near ", "opposite ", "close to ", "next to ", "around ", "at "]
+        for prefix in prefixes:
+            if cleaned_address.lower().startswith(prefix):
+                cleaned_address = cleaned_address[len(prefix):].strip()
+                break
+        location = _geolocator.geocode(cleaned_address)
         if location is None:
             return {"latitude": None, "longitude": None, "resolved_address": None}
         return {
