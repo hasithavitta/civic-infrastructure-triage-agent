@@ -31,7 +31,7 @@ Respond ONLY with valid JSON, no markdown code fences, no extra text, in exactly
 
 severity_classifier_agent = Agent(
     name="severity_classifier_agent",
-    model="gemini-1.5-flash",
+    model="gemini-2.5-flash",
     description="Assigns an explainable urgency score to a report.",
     instruction=SEVERITY_INSTRUCTION,
 )

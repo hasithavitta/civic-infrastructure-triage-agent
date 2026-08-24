@@ -55,7 +55,7 @@ def redact_pii(text: str) -> str:
 
 intake_agent = Agent(
     name="intake_agent",
-    model="gemini-1.5-flash",
+    model="gemini-2.5-flash",
     description="Parses citizen reports into structured, geotagged, PII-safe records.",
     instruction=INTAKE_INSTRUCTION,
     # tools=[geocode_tool],  # wire up the MCP geocoding tool here — see mcp_server/geocoding_server.py

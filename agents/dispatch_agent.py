@@ -41,7 +41,7 @@ Respond ONLY with valid JSON, no markdown code fences, no extra text, in exactly
 
 dispatch_agent = Agent(
     name="dispatch_agent",
-    model="gemini-1.5-flash",
+    model="gemini-2.5-flash",
     description="Routes a report to the correct department and drafts its formal work order in one pass.",
     instruction=DISPATCH_INSTRUCTION,
 )
