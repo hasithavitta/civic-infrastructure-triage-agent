@@ -44,7 +44,7 @@ def verify_api_key(x_api_key: Optional[str] = Header(None)):
 @app.get("/")
 def health_check():
     """Simple health check endpoint for Cloud Run health checks."""
-    return {"status": "ok", "version": "fallback-rate-limit-v4"}
+    return {"status": "ok", "version": "client-side-reveal-v1"}
 
 @app.post("/triage", dependencies=[Depends(verify_api_key)])
 def triage_report(
@@ -83,7 +83,6 @@ def triage_report(
                 detail=f"Failed to read uploaded image file: {str(e)}"
             )
 
-    
     try:
         report = process_report(
             raw_text=raw_text if text_present else None,

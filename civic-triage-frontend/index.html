@@ -172,6 +172,129 @@
       font-size: 0.8rem;
       margin-top: 12px;
     }
+
+    .pipeline-stages {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .pipeline-stage {
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+      padding: 10px 12px;
+      border-radius: 8px;
+      transition: background 0.3s ease, border-left 0.2s ease;
+      border-left: 3px solid transparent;
+    }
+
+    .pipeline-stage.pending {
+      /* Standard pending style */
+    }
+
+    .pipeline-stage.running {
+      background: rgba(56, 189, 248, 0.06);
+      border-left: 3px solid var(--accent);
+    }
+
+    .pipeline-stage.completed {
+      background: rgba(34, 197, 94, 0.04);
+    }
+
+    .pipeline-stage.failed {
+      background: rgba(239, 68, 68, 0.04);
+      border-left: 3px solid var(--red);
+    }
+
+    .pipeline-stage.skipped {
+      opacity: 0.45;
+    }
+
+    .stage-icon {
+      font-size: 1.2rem;
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      line-height: 1;
+      font-weight: bold;
+    }
+
+    .pipeline-stage.pending .stage-icon {
+      color: var(--muted);
+    }
+
+    .pipeline-stage.running .stage-icon {
+      color: var(--accent);
+      animation: spin 1.5s linear infinite;
+    }
+
+    .pipeline-stage.completed .stage-icon {
+      color: var(--green);
+    }
+
+    .pipeline-stage.failed .stage-icon {
+      color: var(--red);
+    }
+
+    .pipeline-stage.skipped .stage-icon {
+      color: var(--muted);
+    }
+
+    .stage-content {
+      flex-grow: 1;
+    }
+
+    .stage-name {
+      font-weight: 600;
+      font-size: 0.95rem;
+      margin-bottom: 3px;
+    }
+
+    .pipeline-stage.pending .stage-name {
+      color: var(--muted);
+    }
+
+    .pipeline-stage.running .stage-name {
+      color: var(--accent);
+    }
+
+    .pipeline-stage.completed .stage-name {
+      color: var(--text);
+    }
+
+    .pipeline-stage.skipped .stage-name {
+      color: var(--muted);
+    }
+
+    .stage-desc {
+      font-size: 0.8rem;
+      color: var(--muted);
+      line-height: 1.35;
+    }
+
+    .stage-message {
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--yellow);
+      margin-top: 4px;
+    }
+
+    .stage-result {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px dashed var(--border);
+      font-size: 0.85rem;
+      color: var(--text);
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
   </style>
 </head>
 
@@ -193,16 +316,58 @@
       <div class="disclosure">Uses a shared, rate-limited demo API key.</div>
     </div>
 
+    <div class="panel hidden" id="pipelinePanel">
+      <h2 style="font-size: 1rem; margin-top: 0; margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 8px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.05em;">AI Triage Pipeline</h2>
+      <div class="pipeline-stages">
+        <div class="pipeline-stage pending" id="stage-intake">
+          <div class="stage-icon">○</div>
+          <div class="stage-content">
+            <div class="stage-name">Intake Agent</div>
+            <div class="stage-desc">Understands the report, analyzes the image, removes personal information and identifies the issue and location.</div>
+            <div class="stage-result hidden" id="result-intake"></div>
+          </div>
+        </div>
+        <div class="pipeline-stage pending" id="stage-duplicate_check">
+          <div class="stage-icon">○</div>
+          <div class="stage-content">
+            <div class="stage-name">Duplicate Check</div>
+            <div class="stage-desc">Checks nearby reports to see whether this issue has already been reported.</div>
+            <div class="stage-message hidden" id="msg-duplicate_check"></div>
+            <div class="stage-result hidden" id="result-duplicate_check"></div>
+          </div>
+        </div>
+        <div class="pipeline-stage pending" id="stage-severity_classification">
+          <div class="stage-icon">○</div>
+          <div class="stage-content">
+            <div class="stage-name">Severity Classifier</div>
+            <div class="stage-desc">Evaluates urgency, potential hazards and nearby vulnerable locations.</div>
+            <div class="stage-result hidden" id="result-severity_classification"></div>
+          </div>
+        </div>
+        <div class="pipeline-stage pending" id="stage-dispatch">
+          <div class="stage-icon">○</div>
+          <div class="stage-content">
+            <div class="stage-name">Dispatch Agent</div>
+            <div class="stage-desc">Selects the appropriate municipal department and prepares a work order.</div>
+            <div class="stage-result hidden" id="result-dispatch"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="panel hidden" id="resultPanel"></div>
   </div>
 
   <script>
-    const API_URL = 'https://civic-infrastructure-triage-agent.onrender.com/triage';
+    const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:'
+      ? 'http://127.0.0.1:8080/triage'
+      : 'https://civic-infrastructure-triage-agent.onrender.com/triage';
     const API_KEY = 'NjKAawdZoDuBwEU9U4JKK8ZIr9jijJyE5mNRu1gsKEU';
 
     const submitBtn = document.getElementById('submitBtn');
     const statusEl = document.getElementById('status');
     const resultPanel = document.getElementById('resultPanel');
+    const pipelinePanel = document.getElementById('pipelinePanel');
 
     function severityColor(score) {
       if (score >= 4) return 'var(--red)';
@@ -217,20 +382,76 @@
     function renderResult(data) {
       const sevColor = severityColor(data.severity_score ?? 0);
       let html = '';
+      if (data.is_duplicate) {
+        html += `<div style="background: rgba(234, 179, 8, 0.08); border: 1px solid rgba(234, 179, 8, 0.3); border-radius: 8px; padding: 12px; margin-bottom: 16px; color: var(--yellow); font-size: 0.85rem; display: flex; align-items: start; gap: 8px; line-height: 1.45;">
+          <span style="font-size: 1.1rem; line-height: 1;">🔗</span>
+          <div>
+            <strong style="color: var(--yellow); font-size: 0.9rem;">Linked Report (Duplicate Ticket)</strong><br/>
+            This issue is already tracked. We've attached your report to the active workflow to increase its priority.
+          </div>
+        </div>`;
+      }
       html += row('Issue type', data.issue_type ?? '—');
       html += row('Description', data.description ?? '—');
       html += row('Address', data.address ?? '—');
-      html += row('Severity', `<span class="badge" style="background:${sevColor}">${data.severity_score ?? '—'}/5</span>`);
-      html += row('Department', data.department ?? '—');
+      
+      const severityVal = data.is_duplicate
+        ? `<span style="color: var(--yellow); font-size: 0.85rem; font-weight: 500;">Linked (Inherited from parent)</span>`
+        : `<span class="badge" style="background:${sevColor}">${data.severity_score ?? '—'}/5</span>`;
+      html += row('Severity', severityVal);
+
+      const deptVal = data.is_duplicate
+        ? `<span style="color: var(--yellow); font-size: 0.85rem; font-weight: 500;">Linked (Inherited from parent)</span>`
+        : (data.department ?? '—');
+      html += row('Department', deptVal);
+
       html += row('Duplicate?', data.is_duplicate ? 'Yes' : 'No');
-      if (data.severity_reasoning) {
-        html += `<div class="work-order"><strong style="color:var(--text)">Severity reasoning:</strong>\n${data.severity_reasoning}</div>`;
-      }
-      if (data.work_order_text) {
-        html += `<div class="work-order"><strong style="color:var(--text)">Work order:</strong>\n${data.work_order_text}</div>`;
+      if (data.is_duplicate) {
+        html += `<div class="work-order" style="border: 1px solid rgba(234, 179, 8, 0.25); background: rgba(30, 41, 59, 0.5);"><strong style="color:var(--text)">Linked Workflow Info:</strong>\nNo new work order drafted. This report is linked to existing ticket <strong>${data.duplicate_of_report_id}</strong>.</div>`;
+      } else {
+        if (data.severity_reasoning) {
+          html += `<div class="work-order"><strong style="color:var(--text)">Severity reasoning:</strong>\n${data.severity_reasoning}</div>`;
+        }
+        if (data.work_order_text) {
+          html += `<div class="work-order"><strong style="color:var(--text)">Work order:</strong>\n${data.work_order_text}</div>`;
+        }
       }
       resultPanel.innerHTML = html;
       resultPanel.classList.remove('hidden');
+    }
+
+    function updateStage(stageId, status, message = null) {
+      const el = document.getElementById(`stage-${stageId}`);
+      if (!el) return;
+
+      el.classList.remove('pending', 'running', 'completed', 'failed', 'skipped');
+      el.classList.add(status);
+
+      const iconEl = el.querySelector('.stage-icon');
+      if (iconEl) {
+        if (status === 'pending') {
+          iconEl.textContent = '○';
+        } else if (status === 'running') {
+          iconEl.textContent = '⟳';
+        } else if (status === 'completed') {
+          iconEl.textContent = '✓';
+        } else if (status === 'failed') {
+          iconEl.textContent = '⚠';
+        } else if (status === 'skipped') {
+          iconEl.textContent = '⊘';
+        }
+      }
+
+      if (stageId === 'duplicate_check') {
+        const msgEl = document.getElementById('msg-duplicate_check');
+        if (message) {
+          msgEl.textContent = message;
+          msgEl.classList.remove('hidden');
+        } else {
+          msgEl.classList.add('hidden');
+          msgEl.textContent = '';
+        }
+      }
     }
 
     submitBtn.addEventListener('click', async () => {
@@ -249,8 +470,42 @@
 
       submitBtn.disabled = true;
       statusEl.className = 'status';
-      statusEl.textContent = 'Running triage — geocoding, severity scoring, duplicate check…';
+      statusEl.textContent = 'Running triage pipeline...';
+      
+      // Reset pipeline UI to pending, hide results
+      const stages = ['intake', 'duplicate_check', 'severity_classification', 'dispatch'];
+      stages.forEach(stage => {
+        updateStage(stage, 'pending');
+        const resEl = document.getElementById(`result-${stage}`);
+        if (resEl) {
+          resEl.classList.add('hidden');
+          resEl.innerHTML = '';
+        }
+        const stageEl = document.getElementById(`stage-${stage}`);
+        if (stageEl) {
+          stageEl.style.background = '';
+          stageEl.style.borderLeft = '';
+          const iconEl = stageEl.querySelector('.stage-icon');
+          if (iconEl) iconEl.style.color = '';
+        }
+      });
+      
+      pipelinePanel.classList.remove('hidden');
       resultPanel.classList.add('hidden');
+
+      // Set Intake to Running immediately
+      updateStage('intake', 'running');
+
+      let currentStageIndex = 0;
+      let timerId = setInterval(() => {
+        if (currentStageIndex < 3) {
+          currentStageIndex++;
+          updateStage(stages[currentStageIndex], 'running');
+        } else {
+          clearInterval(timerId);
+          timerId = null;
+        }
+      }, 3000);
 
       try {
         const headers = {};
@@ -267,15 +522,123 @@
         }
 
         const data = await response.json();
+
+        // Clear timer
+        if (timerId) {
+          clearInterval(timerId);
+          timerId = null;
+        }
+
         statusEl.textContent = '';
+
+        // 1. Intake Agent Reveal
+        const intakeFailed = !data.issue_type || data.description === 'Image triage failed to parse';
+        if (intakeFailed) {
+          updateStage('intake', 'failed');
+        } else {
+          updateStage('intake', 'completed');
+        }
+        let imgHtml = '';
+        if (imageFile) {
+          const imgUrl = URL.createObjectURL(imageFile);
+          imgHtml = `<div style="margin-top: 8px;"><img src="${imgUrl}" style="max-width: 120px; max-height: 120px; border-radius: 8px; border: 1px solid var(--border);" /></div>`;
+        }
+        document.getElementById('result-intake').innerHTML = `
+          <div>Identified: <strong>${data.issue_type || 'Unknown'}</strong></div>
+          ${imgHtml}
+        `;
+        document.getElementById('result-intake').classList.remove('hidden');
+
+        // 2. Duplicate Check Reveal
+        if (data.is_duplicate) {
+          const dupStage = document.getElementById('stage-duplicate_check');
+          dupStage.style.background = 'rgba(234, 179, 8, 0.1)';
+          dupStage.style.borderLeft = '3px solid var(--yellow)';
+          const dupIcon = dupStage.querySelector('.stage-icon');
+          if (dupIcon) {
+            dupIcon.textContent = '🔗';
+            dupIcon.style.color = 'var(--yellow)';
+          }
+
+          document.getElementById('result-duplicate_check').innerHTML = `
+            <div style="color: var(--yellow); font-weight: 500; font-size: 0.9rem; line-height: 1.45;">
+              Matches existing report <strong style="color: var(--text); background: rgba(255,255,255,0.08); padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 0.8rem;">${data.duplicate_of_report_id}</strong> — attaching instead of creating a duplicate work order.
+            </div>
+          `;
+          document.getElementById('result-duplicate_check').classList.remove('hidden');
+
+          // Mark next stages as skipped
+          updateStage('severity_classification', 'skipped');
+          updateStage('dispatch', 'skipped');
+        } else {
+          updateStage('duplicate_check', 'completed');
+          document.getElementById('result-duplicate_check').innerHTML = `
+            <div style="color: var(--green); font-size: 0.9rem;">
+              No matching reports nearby.
+            </div>
+          `;
+          document.getElementById('result-duplicate_check').classList.remove('hidden');
+
+          // 3. Severity Classifier Reveal
+          const severityFailed = data.severity_reasoning && data.severity_reasoning.includes('Fallback severity reasoning due to classification failure');
+          if (severityFailed) {
+            updateStage('severity_classification', 'failed');
+          } else {
+            updateStage('severity_classification', 'completed');
+          }
+          const sevColor = severityColor(data.severity_score ?? 0);
+          const badgeHtml = `<span class="badge" style="background:${sevColor}">${data.severity_score ?? '—'}/5</span>`;
+          const reasoningHtml = `<div style="margin-top: 6px; white-space: pre-wrap; line-height: 1.4; font-size: 0.85rem; color: var(--muted);">${data.severity_reasoning ?? 'No reasoning provided.'}</div>`;
+          document.getElementById('result-severity_classification').innerHTML = `
+            <div style="margin-top: 4px;">
+              <strong>Severity:</strong> ${badgeHtml}
+              ${reasoningHtml}
+            </div>
+          `;
+          document.getElementById('result-severity_classification').classList.remove('hidden');
+
+          // 4. Dispatch Agent Reveal
+          const dispatchFailed = data.work_order_text && data.work_order_text.includes('AUTO-FALLBACK');
+          if (dispatchFailed) {
+            updateStage('dispatch', 'failed');
+          } else {
+            updateStage('dispatch', 'completed');
+          }
+          const deptBadge = `<span class="badge" style="background: var(--accent); color: #0f172a; font-size: 0.85rem; font-weight: bold;">${data.department ?? '—'}</span>`;
+          const detailsHtml = `
+            <details style="margin-top: 8px;">
+              <summary style="cursor: pointer; font-weight: 600; color: var(--accent); font-size: 0.85rem; outline: none; user-select: none;">
+                View Drafted Work Order
+              </summary>
+              <pre style="margin-top: 8px; white-space: pre-wrap; font-family: inherit; font-size: 0.85rem; background: #0f172a; padding: 10px; border-radius: 6px; border: 1px solid var(--border); overflow-x: auto; color: var(--muted);">${data.work_order_text ?? 'No work order drafted.'}</pre>
+            </details>
+          `;
+          document.getElementById('result-dispatch').innerHTML = `
+            <div style="margin-top: 4px;">
+              <strong>Department:</strong> ${deptBadge}
+              ${detailsHtml}
+            </div>
+          `;
+          document.getElementById('result-dispatch').classList.remove('hidden');
+        }
+
+        // Render secondary result panel
         renderResult(data);
+
       } catch (err) {
+        if (timerId) {
+          clearInterval(timerId);
+        }
         statusEl.className = 'status error';
         if (err.message.includes('Failed to fetch')) {
           statusEl.textContent = 'Network/CORS error — check the API URL and that CORS is enabled on the backend.';
         } else {
           statusEl.textContent = `Error: ${err.message}`;
         }
+        updateStage('intake', 'failed');
+        updateStage('duplicate_check', 'skipped');
+        updateStage('severity_classification', 'skipped');
+        updateStage('dispatch', 'skipped');
       } finally {
         submitBtn.disabled = false;
       }

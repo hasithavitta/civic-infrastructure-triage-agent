@@ -33,6 +33,7 @@ def process_report(
     image_filename: str | None = None,
     image_bytes: bytes | None = None,
     image_mime_type: str | None = None,
+    status_callback = None,
 ) -> Report:
     """Runs a single citizen report through the full triage pipeline."""
     import uuid
@@ -43,20 +44,41 @@ def process_report(
         report_id=str(uuid.uuid4()),
     )
 
+    stage_map = {
+        "Intake": "intake",
+        "Duplicate Check": "duplicate_check",
+        "Severity Classification": "severity_classification",
+        "Dispatch": "dispatch"
+    }
+
     stage = "Intake"
     try:
+        if status_callback:
+            status_callback({"stage": "intake", "status": "running"})
         report = run_intake(
             raw_text=raw_text,
             image_filename=image_filename,
             image_bytes=image_bytes,
             image_mime_type=image_mime_type,
         )
+        if status_callback:
+            status_callback({"stage": "intake", "status": "completed"})
 
 
         stage = "Duplicate Check"
+        if status_callback:
+            status_callback({"stage": "duplicate_check", "status": "running"})
         report = run_duplicate_check(report)
 
         if report.is_duplicate:
+            if status_callback:
+                status_callback({
+                    "stage": "duplicate_check", 
+                    "status": "completed", 
+                    "message": "Duplicate report found — attaching to existing report."
+                })
+                status_callback({"stage": "severity_classification", "status": "skipped"})
+                status_callback({"stage": "dispatch", "status": "skipped"})
             print(
                 f"[orchestrator] Report {report.report_id} matches existing "
                 f"report {report.duplicate_of_report_id} — attaching instead "
@@ -65,16 +87,37 @@ def process_report(
             save_report(report)
             return report
 
+        if status_callback:
+            status_callback({"stage": "duplicate_check", "status": "completed"})
+
         stage = "Severity Classification"
+        if status_callback:
+            status_callback({"stage": "severity_classification", "status": "running"})
         report = run_severity_classification(report)
+        if status_callback:
+            status_callback({"stage": "severity_classification", "status": "completed"})
 
         stage = "Dispatch"
-        report = run_dispatch(report)
+        if status_callback:
+            status_callback({"stage": "dispatch", "status": "running"})
+        report = report = run_dispatch(report)
+        if status_callback:
+            status_callback({"stage": "dispatch", "status": "completed"})
 
         save_report(report)
         return report
     except Exception as e:
         print(f"[orchestrator] Pipeline failed at {stage}: {e}")
+        if status_callback:
+            stages = ["intake", "duplicate_check", "severity_classification", "dispatch"]
+            try:
+                current_stage_id = stage_map.get(stage, "intake")
+                current_idx = stages.index(current_stage_id)
+                status_callback({"stage": current_stage_id, "status": "failed"})
+                for s in stages[current_idx + 1:]:
+                    status_callback({"stage": s, "status": "skipped"})
+            except Exception:
+                pass
         return report
 
 
