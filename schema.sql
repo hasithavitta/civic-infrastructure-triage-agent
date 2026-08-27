@@ -13,5 +13,6 @@ CREATE TABLE IF NOT EXISTS reports (
     severity_score INTEGER,
     severity_reasoning TEXT,
     department TEXT,
-    work_order_text TEXT
+    work_order_text TEXT,
+    status TEXT NOT NULL DEFAULT 'open'
 );

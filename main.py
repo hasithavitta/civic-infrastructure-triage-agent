@@ -41,6 +41,20 @@ def verify_api_key(x_api_key: Optional[str] = Header(None)):
             detail="Invalid or missing API key"
         )
 
+def verify_admin_api_key(x_api_key: Optional[str] = Header(None)):
+    triage_key = os.environ.get("TRIAGE_API_KEY")
+    if not triage_key:
+        raise HTTPException(
+            status_code=500,
+            detail="TRIAGE_API_KEY environment variable is not configured on the server."
+        )
+    
+    if not x_api_key or not secrets.compare_digest(x_api_key, triage_key):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or missing Admin API key"
+        )
+
 @app.get("/")
 def health_check():
     """Simple health check endpoint for Cloud Run health checks."""
@@ -91,6 +105,22 @@ def triage_report(
             image_mime_type=image_mime_type
         )
         return asdict(report)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.patch("/reports/{report_id}/resolve", dependencies=[Depends(verify_admin_api_key)])
+def resolve_report(report_id: str):
+    """Marks a report as resolved in Supabase."""
+    from agents.storage import db
+    try:
+        response = db.table("reports").select("report_id").eq("report_id", report_id).execute()
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Report not found")
+        
+        db.table("reports").update({"status": "resolved"}).eq("report_id", report_id).execute()
+        return {"status": "success", "message": f"Report {report_id} marked as resolved."}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

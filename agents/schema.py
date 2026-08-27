@@ -37,3 +37,4 @@ class Report:
     work_order_text: Optional[str] = None
 
     report_id: str = field(default_factory=lambda: "")
+    status: str = "open"
