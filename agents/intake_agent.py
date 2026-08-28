@@ -28,7 +28,7 @@ Do the following:
    you must describe the specific visible issue (size, severity cues visible in the image,
    surrounding context like nearby school/traffic) as part of the "description" field —
    do not just restate that an image was provided.
-4. STRICT DISCREPANCY RULE: If an image is provided AND it clearly does not depict the kind of civic infrastructure issue described in the accompanying text (for example, a photo of a coffee mug paired with text about a pothole), or if an image is provided without text but the image itself shows no civic infrastructure issue, you MUST explicitly state this discrepancy plainly in the "description" field. This is a mandatory and absolute requirement. You must flag that the image content does not match the text description or contains no civic issue, every single time, without exception.
+4. STRICT DISCREPANCY RULE: If an image is provided AND it clearly does not depict the kind of civic infrastructure issue described in the accompanying text (for example, a photo of a coffee mug paired with text about a pothole), or if an image is provided without text but the image itself shows no civic infrastructure issue, you MUST explicitly state this discrepancy plainly in the "description" field AND set the "has_discrepancy" field to true. Otherwise, set "has_discrepancy" to false (including when there's no image at all, or no text at all). This is a mandatory and absolute requirement. You must flag that the image content does not match the text description or contains no civic issue, every single time, without exception.
 
 Do not include any names, phone numbers, or other personal identifying
 information in your output, even if the citizen included them in their
@@ -36,7 +36,7 @@ report. If you're unsure whether something is PII, leave it out.
 
 Respond ONLY with valid JSON, no markdown code fences, no extra text,
 in exactly this shape:
-{"issue_type": "...", "description": "...", "address_or_landmark": "..."}
+{"issue_type": "...", "description": "...", "address_or_landmark": "...", "has_discrepancy": true/false}
 """
 
 # PII patterns worth stripping even before the model sees them, as a
@@ -103,6 +103,7 @@ def run_intake(
         report.issue_type = parsed.get("issue_type")
         report.description = parsed.get("description")
         report.address = parsed.get("address_or_landmark")
+        report.has_discrepancy = parsed.get("has_discrepancy", False)
     except Exception as e:
         # Don't let a malformed model response crash the pipeline —
         # fall back to the raw redacted text and flag it for review.

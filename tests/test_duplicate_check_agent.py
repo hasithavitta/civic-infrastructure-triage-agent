@@ -49,3 +49,23 @@ def test_duplicate_check_malformed_fallback(mock_gemini, mock_geocoding, mock_st
     assert res.is_duplicate is False
     assert res.duplicate_of_report_id is None
 
+def test_duplicate_check_mismatch_bypass(mock_gemini, mock_geocoding, mock_storage, report_factory):
+    # Prepare a candidate report at the same coordinates
+    mock_storage.clear()
+    mock_storage.save(report_factory(latitude=17.4245627, longitude=78.4569401, report_id="match-report"))
+    
+    # Create the new report but flag an image/text discrepancy in the description
+    report = report_factory(
+        latitude=17.4245627, 
+        longitude=78.4569401,
+        has_discrepancy=True
+    )
+    
+    # Duplicate checking should bypass model calls and return False
+    res = run_duplicate_check(report)
+    
+    assert res.is_duplicate is False
+    assert res.duplicate_of_report_id is None
+    mock_gemini.duplicate.assert_not_called()
+
+

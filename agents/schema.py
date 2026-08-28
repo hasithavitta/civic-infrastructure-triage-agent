@@ -21,6 +21,7 @@ class Report:
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     address: Optional[str] = None
+    has_discrepancy: bool = False
 
     # Filled in by DuplicateCheckAgent
     is_duplicate: bool = False

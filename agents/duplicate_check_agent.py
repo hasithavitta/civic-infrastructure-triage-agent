@@ -40,6 +40,12 @@ def run_duplicate_check(report: Report) -> Report:
     Orchestrator-facing entry point. Checks if the report is a duplicate of any
     existing report using geospatial pre-filtering followed by semantic check.
     """
+    if report.has_discrepancy:
+        print(f"[duplicate_check_agent] Image/text discrepancy flagged in report {report.report_id}. Bypassing duplicate check.")
+        report.is_duplicate = False
+        report.duplicate_of_report_id = None
+        return report
+
     if report.latitude is None or report.longitude is None:
         report.is_duplicate = False
         report.duplicate_of_report_id = None

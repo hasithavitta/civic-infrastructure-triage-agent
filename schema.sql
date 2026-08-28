@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS reports (
     latitude DOUBLE PRECISION,
     longitude DOUBLE PRECISION,
     address TEXT,
+    has_discrepancy BOOLEAN NOT NULL DEFAULT FALSE,
     is_duplicate BOOLEAN NOT NULL DEFAULT FALSE,
     duplicate_of_report_id TEXT,
     severity_score INTEGER,
