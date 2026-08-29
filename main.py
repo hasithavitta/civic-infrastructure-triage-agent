@@ -1,7 +1,10 @@
 import os
 import uvicorn
 import secrets
-from fastapi import FastAPI, HTTPException, Form, UploadFile, Header, Depends
+import time
+import threading
+from collections import defaultdict
+from fastapi import FastAPI, HTTPException, Form, UploadFile, Header, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
 from dataclasses import asdict
@@ -55,6 +58,33 @@ def verify_admin_api_key(x_api_key: Optional[str] = Header(None)):
             detail="Invalid or missing Admin API key"
         )
 
+rate_limit_lock = threading.Lock()
+rate_limit_records = defaultdict(list)
+
+def reset_rate_limiter():
+    with rate_limit_lock:
+        rate_limit_records.clear()
+
+def check_rate_limit(ip: str):
+    current_time = time.monotonic()
+    with rate_limit_lock:
+        timestamps = rate_limit_records[ip]
+        cutoff = current_time - 60.0
+        while timestamps and timestamps[0] < cutoff:
+            timestamps.pop(0)
+        
+        if len(timestamps) >= 5:
+            oldest_time = timestamps[0]
+            retry_after = 60.0 - (current_time - oldest_time)
+            retry_after_sec = max(1, int(retry_after))
+            raise HTTPException(
+                status_code=429,
+                detail="Rate limit exceeded. Please try again later.",
+                headers={"Retry-After": str(retry_after_sec)}
+            )
+        
+        timestamps.append(current_time)
+
 @app.get("/")
 def health_check():
     """Simple health check endpoint for Cloud Run health checks."""
@@ -62,6 +92,7 @@ def health_check():
 
 @app.post("/triage", dependencies=[Depends(verify_api_key)])
 def triage_report(
+    request: Request,
     raw_text: Optional[str] = Form(None),
     image: Optional[UploadFile] = None
 ):
@@ -96,6 +127,9 @@ def triage_report(
                 status_code=400,
                 detail=f"Failed to read uploaded image file: {str(e)}"
             )
+
+    client_ip = request.client.host if request.client else "127.0.0.1"
+    check_rate_limit(client_ip)
 
     try:
         report = process_report(
