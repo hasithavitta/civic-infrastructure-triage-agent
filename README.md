@@ -1,210 +1,190 @@
 # Civic Infrastructure Triage Agent
 
-A multi-agent system that turns a citizen's photo or text report of broken
-public infrastructure into a routed, department-ready work order —
-automatically. A personal project exploring what multi-agent systems are
-actually good for, built with Google's Agent Development Kit (ADK), a
-custom MCP server, and Gemini's multimodal capability.
+A multi-agent system that turns a citizen's photo or text report of broken public infrastructure into a routed, department-ready work order — automatically.
 
 ---
 
 ## Problem
 
-Citizens who spot broken infrastructure (potholes, damaged streetlights,
-overflowing drains) have no fast way to report it in a form municipal
-departments can act on. Reports get lost in generic complaint inboxes,
-duplicates pile up, and there's no consistent way to judge which issues are
-actually urgent. The result: slow fixes, wasted staff time, and citizens who
-give up reporting altogether.
+Citizens who spot broken infrastructure (potholes, damaged streetlights, overflowing drains) have no fast way to report it in a form municipal departments can act on. Reports get lost in generic complaint inboxes, duplicates pile up, and there's no consistent way to judge which issues are actually urgent. The result: slow fixes, wasted staff time, and citizens who give up reporting altogether.
 
 ## Solution
 
-An agent pipeline that takes a raw report — a photo, a text description, or
-both together — reasons about it the way a triage officer would, and
-produces a structured, routed work order. The Intake Agent uses Gemini's
-multimodal capability to actually see and describe an uploaded photo (not
-just accept a filename), checking for duplicates and explaining its own
-severity judgment along the way.
+The system orchestrates a pipeline of four specialized agents to ingest, filter, classify, and route citizen reports:
 
 ```
-Citizen report → Intake Agent → Duplicate Check Agent → Severity Classifier
-Agent → Dispatch Agent → Dispatched work order
+Citizen Report ──> Intake Agent ──> Duplicate Check Agent ──> Severity Classifier Agent ──> Dispatch Agent ──> Work Order
+                                           │ (If duplicate)
+                                           └───> [Short-circuit & attach to existing]
 ```
 
-Four agents, not five: routing and work order drafting are combined into
-a single Dispatch Agent. They share the same inputs and produce related
-outputs, so a separate LLM round-trip between them added latency and one
-more state handoff without adding real capability.
+### 1. Intake Agent
+Uses Gemini's multimodal capabilities to analyze uploaded photos, extracting structured issue types and address details. It applies regex-based PII redaction on phone numbers and emails as a defense-in-depth measure before any model calls occur.
+* **Multimodal Mismatch Flagging**: If the uploaded image does not depict the civic infrastructure issue described in the accompanying text (or contains no civic issue), the agent sets `has_discrepancy` to `true`. Reports flagged with a discrepancy bypass duplicate checking entirely to avoid being silently merged into unrelated issues.
 
-An MCP server exposing geocoding and mapping tools supports the Intake and
-Duplicate Check agents, isolating GIS logic into a clean, swappable service
-rather than tangling it into agent prompts.
+### 2. Duplicate Check Agent
+Uses a hybrid geospatial and semantic matching approach:
+* **PostGIS Pre-filtering**: Instead of pulling all reports into Python, the agent queries the database directly using a custom `get_reports_near` database function to identify candidates within 100 meters. Resolved reports (`status = 'resolved'`) are excluded.
+* **Semantic Verification**: An LLM call evaluates semantic equivalence only among the nearby geospatial candidates. If a duplicate is found, the pipeline short-circuits, attaching the new report to the existing one.
 
-## Why agents (not a fixed script)
+### 3. Severity Classifier Agent
+Scores the urgency of the report on a 1-5 scale (from minor cosmetic issues to immediate safety hazards) and explains its reasoning in plain language.
+* **Live Landmark Context**: The agent live-queries schools and hospitals within 200 meters using OpenStreetMap's Overpass API. If a landmark is a factor, the agent is instructed to name the specific school or hospital in its final reasoning rather than using generic text.
 
-Each stage requires judgment, not a lookup table:
-- **Severity** depends on context (a pothole near a school ranks differently
-  than the same pothole on a low-traffic road) — this needs reasoning, not a
-  hardcoded rubric.
-- **Duplicate detection** requires semantic + geospatial matching against
-  open-ended prior reports, not exact-match lookups.
-- **Routing** depends on interpreting the issue type against a department's
-  actual jurisdiction, which varies by municipality and issue description.
-- **Multimodal consistency checking** — deciding whether an uploaded photo
-  actually matches its accompanying text isn't a fixed classification
-  problem; it requires genuinely comparing open-ended image content against
-  open-ended text.
+### 4. Dispatch Agent
+Decides the destination department and drafts the formal work order in a single LLM call. Combining routing and drafting cuts down on latency, state-handoff points, and LLM round-trips.
+
+---
 
 ## Architecture
 
 | Agent | Responsibility |
-|---|---|
-| **Intake Agent** | Parses the photo/text report, extracts issue type and location, and geotags it via the MCP geocoding tool. Uses Gemini's multimodal input to genuinely analyze an uploaded photo (not just record that one was attached) — if the image and text description conflict, the agent is instructed to flag the mismatch explicitly rather than silently trusting one input over the other. |
-| **Duplicate Check Agent** | Searches existing reports for geospatial + semantic matches. If found, attaches to the existing report instead of creating a new one (this is the one conditional branch in the pipeline). |
-| **Severity Classifier Agent** | Scores urgency and — importantly — explains *why* (structural risk, proximity to schools/hospitals, foot traffic), rather than returning a black-box label. |
-| **Dispatch Agent** | Maps the issue category to the correct municipal department AND drafts the formal work order, in one call. |
+| :--- | :--- |
+| **Intake Agent** | Redacts PII, parses photos/text, extracts location, and geotags reports. Flags text/image mismatches (`has_discrepancy`) to bypass duplicate checks. |
+| **Duplicate Check Agent** | Filters candidates within 100m using PostGIS (`get_reports_near`), excluding resolved reports, and performs semantic LLM validation to short-circuit duplicates. |
+| **Severity Classifier Agent** | Live-queries OpenStreetMap Overpass API for schools/hospitals within 200m, assigning an explainable 1-5 severity score referencing specific landmarks by name. |
+| **Dispatch Agent** | Routes the report to the correct department and drafts the formal work order in a single LLM call. |
 
-## Tech stack
+---
 
-- **Google ADK** — multi-agent orchestration (via a shared `Runner` +
-  `InMemorySessionService` helper in `agents/runner_utils.py`)
-- **MCP Server** — custom geocoding/maps tool server (`mcp_server/geocoding_server.py`)
-- **LLM** — Gemini (via ADK)
-- **API** — FastAPI wrapper (`main.py`) exposing `/triage` and a `/` health check
-- **Deployment** — Render (Docker web service)
-- **Database** — Supabase table storage
-- **Security** — PII redaction on intake (phone numbers/emails stripped from
-  free-text descriptions via regex before the report reaches the model or
-  is stored)
+## Tech Stack
 
-> **Note on auth:** the deployed `/triage` endpoint is currently public
-> (`--allow-unauthenticated`). This was fine for early testing, but since
-> this is an ongoing project rather than a one-off demo, adding real
-> authentication is now a near-term priority — see Known limitations below.
+* **Google ADK**: Orchestrates the multi-agent execution pipeline via a shared runner and session service.
+* **MCP Server**: A custom geocoding/landmarks server ([`geocoding_server.py`](file:///c:/Users/Admin/Desktop/civic-triage-agent/mcp_server/geocoding_server.py)) that wraps geopy (Nominatim) for geocoding and executes live OpenStreetMap Overpass API queries.
+* **LLM**: Gemini (`gemini-3.6-flash`) utilized via the Google ADK interface across all agents.
+* **Database**: Supabase (PostgreSQL + PostGIS) for persistent storage and distance-based RPC queries.
+* **Deployment**:
+  * **Backend**: Render (Docker web service). Render is selected over Cloud Run to avoid mandatory credit card billing requirements; Render, Supabase, and Google AI Studio API keys allow this project to run on a zero-credit-card-required stack.
+  * **Frontend**: A static HTML/CSS/JS frontend hosted on Vercel, which communicates directly with the Render API.
+* **Security & Auth**:
+  * **PII Redaction**: Pre-model regex filtering to redact phone numbers and emails.
+  * **Dual-Key API Authentication**: Protects the API using a full Admin Key (`TRIAGE_API_KEY`) and a lower-trust Demo Key (`TRIAGE_DEMO_API_KEY`). The Demo Key can call `/triage`, but only the Admin Key is authorized to call the `/reports/{report_id}/resolve` endpoint.
+  * **Rate Limiting**: Sliding window in-memory rate limiting applied to the `/triage` endpoint (capped at 5 requests per 60 seconds per IP).
 
-## No frontend (for now)
+---
 
-This project is currently API-first: a working `/triage` endpoint
-(accepting text, an uploaded photo, or both) rather than a UI. That was a
-reasonable place to focus effort early on — proving the agent pipeline,
-the MCP server, and real multimodal reasoning all work — but a simple
-frontend is a natural next step now that the backend is stable (see
-Roadmap).
+## Live Demo
+
+* **Live Frontend**: [https://civic-triage-frontend-m7lo262hy-hasithavittas-projects.vercel.app](https://civic-triage-frontend-m7lo262hy-hasithavittas-projects.vercel.app)
+* **Backend API**: [https://civic-infrastructure-triage-agent.onrender.com](https://civic-infrastructure-triage-agent.onrender.com)
+* *Note: The frontend uses a shared, rate-limited demo key. Heavy testing may temporarily exceed the model rate limits.*
+
+---
 
 ## Setup
 
+### 1. Clone & Install Dependencies
 ```bash
 git clone <your-repo-url>
 cd civic-triage-agent
 python -m venv venv
-source venv/bin/activate        # Windows: venv\Scripts\activate
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
-
-cp .env.example .env   # fill in your own API key — never commit real keys
 ```
 
-Your `.env` needs at minimum:
-```
-GOOGLE_API_KEY=your_real_gemini_key_here
+### 2. Configure Environment Variables
+Create a `.env` file in the root directory:
+```env
+GOOGLE_API_KEY=your_gemini_api_key
 GOOGLE_GENAI_USE_VERTEXAI=False
+SUPABASE_URL=your_supabase_project_url
+SUPABASE_KEY=your_supabase_anon_key
+TRIAGE_API_KEY=your_secret_admin_key
+TRIAGE_DEMO_API_KEY=your_public_demo_key
 ```
-> `GOOGLE_GENAI_USE_VERTEXAI=False` matters: some ADK/genai versions default
-> to Vertex AI credential mode and will reject a valid `GOOGLE_API_KEY`
-> with an "API key not valid" error unless this is set explicitly.
+> [!IMPORTANT]
+> `GOOGLE_GENAI_USE_VERTEXAI=False` must be explicitly configured, or the ADK framework may fail to authenticate Gemini API keys by defaulting to Vertex AI.
 
-Run the pipeline directly:
-```bash
-python orchestrator.py
-```
+### 3. Database Initialization
+Ensure your Supabase project has the **PostGIS** extension enabled. Run the SQL schema script in [`schema.sql`](file:///c:/Users/Admin/Desktop/civic-triage-agent/schema.sql) in your Supabase SQL editor to create the `reports` table and define the `get_reports_near` function.
 
-Or run the API locally:
+### 4. Run Locally
+Start the local FastAPI server:
 ```bash
 python main.py
-# then, in another terminal — text only:
-curl -X POST http://localhost:8080/triage \
-  -F "raw_text=A large pothole on Main Street outside the elementary school."
-
-# or with a photo attached:
-curl -X POST http://localhost:8080/triage \
-  -F "raw_text=A large pothole on Main Street outside the elementary school." \
-  -F "image=@/path/to/photo.jpg"
 ```
+By default, the server will start on port `8080`.
+
+### Example `curl` Commands
+
+* **Submit Report (Text Only):**
+  ```bash
+  curl -X POST http://localhost:8080/triage \
+    -H "X-API-Key: your_public_demo_key" \
+    -F "raw_text=Large pothole near Raj Bhavan Road, Somajiguda, Hyderabad."
+  ```
+
+* **Submit Report (With Image):**
+  ```bash
+  curl -X POST http://localhost:8080/triage \
+    -H "X-API-Key: your_public_demo_key" \
+    -F "raw_text=Clogged drain causing water accumulation." \
+    -F "image=@/path/to/pothole.jpg"
+  ```
+
+* **Resolve Report (Admin Key Required):**
+  ```bash
+  curl -X PATCH http://localhost:8080/reports/<report_id>/resolve \
+    -H "X-API-Key: your_secret_admin_key"
+  ```
+
+---
 
 ## Testing
 
-`tests/test_mcp_geocoding.py` is a standalone smoke test for the MCP
-geocoding server's core functions (geocoding and distance calculation),
-runnable independently of the full agent pipeline:
+The project has a comprehensive, automated test suite to ensure robustness and catch regressions. The suite contains **37 tests** in total.
+
+### 1. Run the Offline Mocked Test Suite
+To run all tests offline (excluding live geocoding/landmarks API calls):
 ```bash
-python tests/test_mcp_geocoding.py
+python -m pytest tests/ -v --ignore=tests/test_mcp_geocoding.py
 ```
+This runs **34 tests** offline. All agent behaviors, rate-limiting rules, error boundaries, and dual-key permissions are fully mocked to prevent hitting Gemini API quotas or sending real network requests.
+* **Mutation Testing Case**: The PII redaction logic contains a strict mutation test (`test_pii_redaction_before_model_call` in [`test_intake_agent.py`](file:///c:/Users/Admin/Desktop/civic-triage-agent/tests/test_intake_agent.py)) that inspects the actual mock arguments to verify that sensitive details are stripped *before* the prompt reaches the LLM.
 
-The multimodal `/triage` endpoint has been manually verified against
-text-only, image-only, and text+image cases — including a deliberate
-mismatch test (an unrelated photo paired with infrastructure text) to
-confirm the Intake Agent actually inspects the image content rather than
-trusting the text description blindly. Automated tests for the full agent
-pipeline (beyond the MCP server smoke test) are a known gap — see Roadmap.
+### 2. Run Live Network Smoke Tests
+To run the live Nominatim/Overpass API integration checks (run sparingly as it makes real network calls and is subject to rate limits):
+```bash
+python -m pytest tests/test_mcp_geocoding.py -v
+```
+This runs the remaining **3 tests** in the suite.
 
-## Deploying to Render
+---
 
-This application is deployed as a containerized Docker Web Service on Render.
+## Deployment
 
-### Deployment Steps:
+### Backend (Render)
+1. Create a new **Web Service** on Render and connect your GitHub repository.
+2. Render automatically detects the root [`Dockerfile`](file:///c:/Users/Admin/Desktop/civic-triage-agent/Dockerfile) to build the container.
+3. Configure the **Health Check Path** to `/`.
+4. In the Render Dashboard under **Environment**, add the environment variables defined in the `.env` section.
 
-1. **Database Setup**:
-   Create a new project on [Supabase](https://supabase.com). In the Supabase SQL Editor, run the DDL script in [schema.sql](file:///c:/Users/Admin/Desktop/civic-triage-agent/schema.sql) to set up the `reports` table.
+### Frontend (Vercel)
+1. Deploy the project repository to Vercel.
+2. In the project settings, configure the **Root Directory** to `civic-triage-frontend`.
+3. The frontend does not require any Vercel-side environment variables; instead, [`index.html`](file:///c:/Users/Admin/Desktop/civic-triage-agent/civic-triage-frontend/index.html) features a client-side JavaScript check on `window.location.hostname` (and `window.location.protocol`) to dynamically switch between the local API endpoint (`http://127.0.0.1:8080/triage`) and the production Render API endpoint.
 
-2. **Create Render Service**:
-   - Log in to [Render](https://render.com) and create a new **Web Service**.
-   - Connect your GitHub repository containing this project.
+---
 
-3. **Configure Service Settings**:
-   - **Language/Environment**: Choose **Docker**.
-   - **Instance Type**: Select **Free** (or any tier of your choice).
-   - **Health Check Path**: Set to `/` (this verifies that the service starts and responds with `{"status":"ok"}`).
+## Build Process & Engineering Discipline
 
-4. **Add Environment Variables**:
-   In the **Environment** tab on Render's dashboard, add the following variables:
-   - `GOOGLE_API_KEY`: Your Gemini API key.
-   - `GOOGLE_GENAI_USE_VERTEXAI`: `False`.
-   - `SUPABASE_URL`: Your Supabase project URL.
-   - `SUPABASE_KEY`: Your Supabase API key (anon key is fine).
-   - `TRIAGE_API_KEY`: Your secret API key to secure the `/triage` endpoint (sent via the `X-API-Key` header).
+This project was built iteratively using **Antigravity** as an AI coding agent, applying disciplined, test-driven engineering practices. Working in pair-programming cycles, we successfully identified and resolved critical bugs:
+* **Duplicate-Check Exact Match Regression**: Detected via adversarial tests ([`run_harder_duplicate.py`](file:///c:/Users/Admin/Desktop/civic-triage-agent/tests/run_harder_duplicate.py)), where the duplicate check agent initially required exact issue type matches. We corrected this to allow semantic equivalence (e.g. marking "massive sinkhole" and "road surface damage" at the same coordinates as duplicates).
+* **Database Client Retry Regression**: During the PostGIS migration commit, the retry-logic configuration on the database client was silently reverted from a robust, fail-fast policy (2 retries, 2s/4s delays) back to its legacy configuration (5 retries with exponential backoff up to 60 seconds). This regression went unnoticed until a live test hung for several minutes. It was caught and debugged via git log inspection and live log analysis, and restored back to the fail-fast behavior.
+* **Infrastructure Migration**: Navigated a full, unplanned migration of the service and database (moving from GCP Cloud Run billing constraints to a zero-billing stack using Render and Supabase) without losing feature parity or breaking unit tests.
 
-## Known limitations
+---
 
-Being upfront about these, since they're the real difference between "a
-working demo" and "something you'd trust in production":
+## Known Limitations
 
-- **No authentication** on the deployed endpoint — anyone with the URL can
-  call it. Fine for now, not fine long-term.
-- **Database Persistence** — Reports are stored persistently in Supabase, preventing duplicate check loss after service restarts or across scaled instances.
-- **Geocoding isn't actually wired into the Intake Agent yet** — the MCP
-  server's `geocode_address` tool exists and is tested standalone, but
-  `run_intake()` doesn't call it yet, so `latitude`/`longitude` stay `null`
-  on every report. The Duplicate Check Agent currently relies on semantic
-  similarity alone, not real geospatial distance.
-- **No automated tests for the four agents themselves** — only the MCP
-  geocoding functions have a dedicated test file. Agent behavior has been
-  verified through manual testing, not a repeatable test suite.
-- **Free-tier Gemini rate limits** will interrupt real usage quickly (20
-  requests/day on the free tier, and each `/triage` call uses 3-4 model
-  calls). A paid tier is basically required for anything beyond casual use.
+* **In-Memory Rate Limiting**: The sliding-window rate limiter is stored in-memory per-instance. It resets when the service restarts and would fragment if the backend were scaled to multiple instances.
+* **Gemini Free-Tier Limits**: Deployed with Gemini API keys subject to free-tier rate limits, meaning high concurrent traffic will result in temporary model degradation or fallback work orders.
+* **Prompt/Reasoning Verification**: While structural behaviors, error fallbacks, and schema parsing are automated, the actual quality and correctness of the agents' prompts are verified manually.
+
+---
 
 ## Roadmap
 
-Rough priority order for continuing this as a real project, not just a demo:
-
-1. Wire `geocode_address` into `run_intake()` so `latitude`/`longitude`
-   actually populate, and have the Duplicate Check Agent use real distance
-   calculations (via `distance_meters`) alongside semantic matching.
-2. Replace in-memory report storage with a real database (Done — using Supabase).
-3. Add authentication to the deployed endpoint.
-4. Add a proper automated test suite for the four agents (mocking the
-   Gemini calls, testing the orchestrator's branching logic in isolation).
-5. A minimal frontend — even a simple form with an image upload — so this
-   is usable by someone who isn't comfortable with curl.
-6. Regional language support for report intake.
-7. Voice input.
-8. Offline queuing for low-connectivity areas.
+* **Reports Dashboard & Map View**: Build an administrative interface to visually display routed work orders and duplicates on a map.
+* **Persistent Rate Limiting**: Migrate the IP-based rate limiting to a Redis store to support multi-instance horizontal scaling.
+* **Expanded Landmark Categories**: Incorporate a broader set of sensitive locations (e.g., nursing homes, emergency routes) to dynamically weigh severity scores.
